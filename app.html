@@ -1,0 +1,807 @@
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>NOVA AI OS Desktop</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* Layout concept: full-window desktop shell. Topbar, desktop icons, floating windows, dock. */
+:root{
+  --bg:#0b0614; --fg:#EDE7FF; --muted:#A596C4;
+  --accent:#A855F7; --accent2:#EC4899;
+  --glass:rgba(255,255,255,.07); --line:rgba(200,160,255,.22);
+  --wall:radial-gradient(circle at 70% 30%,#3B1A6B 0%,#1A0B2E 55%,#0B0614 100%);
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--fg);font:14px/1.5 Inter,system-ui,sans-serif;overflow:hidden}
+button,input,textarea{font:inherit;color:inherit}
+button{background:none;border:0;cursor:pointer;padding:0}
+input{background:rgba(0,0,0,.3);border:1px solid var(--line);border-radius:12px;padding:10px 12px;min-width:0;outline:none}
+input:focus-visible,button:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+[hidden]{display:none!important}
+a{color:var(--fg)}
+
+.desk{position:fixed;inset:0;background:#07050d;overflow:hidden}
+/* Every wallpaper (base gradients and uploaded images) drifts slowly */
+#wallpaper{position:absolute;inset:-6%;background-image:var(--wall);background-size:cover;background-position:center;background-repeat:no-repeat;animation:drift 14s ease-in-out infinite alternate}
+@keyframes drift{from{transform:translate3d(-4%,-2%,0)}to{transform:translate3d(4%,3%,0)}}
+@media (prefers-reduced-motion:reduce){#wallpaper{animation:none}}
+#live{position:absolute;inset:0;width:100%;height:100%}
+
+.topbar{position:absolute;top:0;left:0;right:0;height:40px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;background:#140a24;border-bottom:1px solid var(--line);z-index:900}
+.brand{font-weight:600;letter-spacing:.12em;font-size:13px;color:#E0C8FF;display:flex;align-items:center;gap:8px}
+.brand span.star{color:#C084FC}
+#clock{font-size:13px;color:#CBB8F0;font-variant-numeric:tabular-nums}
+
+.icons{position:absolute;top:64px;left:16px;display:flex;flex-direction:column;flex-wrap:wrap;max-height:calc(100% - 150px);column-gap:8px;row-gap:12px;z-index:1}
+.icon-btn{display:flex;flex-direction:column;align-items:center;gap:6px;width:88px;padding:6px;border-radius:12px;font-size:12px}
+.icon-btn:hover{background:var(--glass)}
+
+.glyph{width:52px;height:52px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:19px;color:#fff;flex:0 0 auto}
+.g-files{background:linear-gradient(135deg,#8B5CF6,#6D28D9)}
+.g-term{background:linear-gradient(135deg,#334155,#0F172A)}
+.g-settings{background:linear-gradient(135deg,#A855F7,#EC4899)}
+.g-browser{background:linear-gradient(135deg,#FF7A2F,#E0457B)}
+.g-ai{background:linear-gradient(135deg,#7C3AED,#C026D3)}
+.g-wa{background:#25D366;--c:#fff}
+.g-yt{background:#fff;--c:#FF0000}
+.g-gm{background:#fff;--c:#EA4335}
+.g-maps{background:#fff;--c:#4285F4}
+.g-sp{background:#000;--c:#1DB954}
+.g-ig{background:linear-gradient(45deg,#F58529,#DD2A7B 50%,#8134AF);--c:#fff}
+.g-gg{background:#fff;--c:#4285F4}
+.logo{width:30px;height:30px;display:block;background:var(--c,#fff);-webkit-mask:var(--m) no-repeat center/contain;mask:var(--m) no-repeat center/contain}
+
+.win{position:absolute;display:flex;flex-direction:column;border-radius:16px;overflow:hidden;background:#120a20;border:1px solid var(--line);box-shadow:0 24px 70px rgba(140,70,240,.35);backdrop-filter:blur(14px);z-index:10}
+.win-head{height:38px;flex:0 0 38px;display:flex;align-items:center;justify-content:space-between;padding:0 12px;background:rgba(255,255,255,.05);cursor:grab;user-select:none;font-weight:600;font-size:13px;touch-action:none}
+.win-body{flex:1;min-height:0;overflow:auto;padding:14px}
+.close{width:24px;height:24px;border-radius:50%;background:rgba(255,255,255,.12);font-size:12px;line-height:24px;text-align:center}
+.close:hover{background:rgba(255,90,130,.55)}
+.muted{color:var(--muted);font-size:12px}
+
+.files{display:flex;gap:12px;height:100%}
+.side{width:124px;flex:0 0 124px;display:flex;flex-direction:column;gap:4px}
+.side button{text-align:left;padding:7px 9px;border-radius:9px;color:var(--fg)}
+.side button:hover{background:var(--glass)}
+.side button[aria-pressed="true"]{background:rgba(168,85,247,.25)}
+.list{flex:1;min-width:0}
+.list h3{margin:0 0 8px;font-size:14px}
+.file-list{list-style:none;margin:0;padding:0}
+.file-list li{padding:8px 10px;border-radius:9px;color:#D9CCF5}
+.file-list li:hover{background:var(--glass)}
+
+.term-out{white-space:pre-wrap;font:13px/1.6 ui-monospace,Menlo,Consolas,monospace;color:#D9CCF5;margin:0 0 6px}
+.term-form{display:flex;gap:8px;align-items:center;font:13px ui-monospace,Menlo,Consolas,monospace;color:#C084FC}
+.term-form input{flex:1;background:transparent;border:0;padding:4px 0;color:#EDE7FF;font:inherit;border-radius:0}
+
+.settings-row{display:flex;flex-direction:column;gap:8px;margin-bottom:18px}
+.swatches,.walls{display:flex;gap:10px;flex-wrap:wrap}
+.swatch{width:36px;height:36px;border-radius:50%;border:2px solid transparent}
+.swatch[aria-pressed="true"]{border-color:#fff}
+.chip{padding:8px 12px;border-radius:999px;background:var(--glass);border:1px solid var(--line)}
+.chip[aria-pressed="true"]{background:rgba(168,85,247,.3)}
+
+.url-row{display:flex;gap:8px;margin-bottom:12px}
+.url-row input{flex:1}
+.go{padding:10px 14px;border-radius:12px;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;font-weight:600}
+.start{display:flex;flex-direction:column;gap:6px}
+.start a{display:block;padding:9px 10px;border-radius:10px;text-decoration:none;background:var(--glass)}
+.start a:hover{background:rgba(255,255,255,.12)}
+
+.chat-log{display:flex;flex-direction:column;gap:10px;margin-bottom:12px}
+.msg{max-width:85%;padding:10px 12px;border-radius:14px;white-space:pre-wrap;font-size:14px}
+.msg.me{align-self:flex-end;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;border-bottom-right-radius:4px}
+.msg.bot{align-self:flex-start;background:var(--glass);border-bottom-left-radius:4px}
+.chat-form{display:flex;gap:8px}
+.chat-form input{flex:1;border-radius:999px}
+.send{padding:10px 14px;border-radius:999px;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;font-weight:600}
+
+.launcher{position:absolute;top:50px;left:16px;width:280px;padding:12px;border-radius:16px;background:rgba(18,10,32,.95);border:1px solid var(--line);z-index:950;display:flex;flex-direction:column;gap:8px}
+.launcher .list-apps{display:flex;flex-direction:column;gap:2px}
+.launcher .list-apps button{display:block;width:100%;text-align:left;padding:8px 10px;border-radius:10px}
+.launcher .list-apps button:hover{background:var(--glass)}
+
+.dock{position:absolute;left:50%;bottom:16px;transform:translateX(-50%);display:flex;gap:14px;padding:10px 16px;border-radius:22px;background:#140a24;border:1px solid var(--line);z-index:900;max-width:calc(100% - 32px);overflow-x:auto}
+.dock button{border-radius:14px}
+.dock button:hover{transform:translateY(-3px)}
+
+@media (max-width:700px){
+  .win{left:0!important;right:0;top:48px!important;width:auto!important;height:calc(100% - 150px)!important}
+  .icons{top:48px;flex-direction:row;flex-wrap:wrap;left:8px;right:8px;gap:4px}
+  .icon-btn{width:70px}
+  .dock{gap:8px;padding:8px 10px}
+  .glyph{width:44px;height:44px}
+  .launcher{left:8px;right:8px;width:auto}
+}
+</style>
+
+<div class="desk" id="desk">
+  <div id="wallpaper" aria-hidden="true"></div>
+  <canvas id="live" hidden aria-hidden="true"></canvas>
+
+  <div class="topbar">
+    <div class="brand"><span class="star">✦</span> NOVA</div>
+    <div style="display:flex;align-items:center;gap:12px">
+      <button type="button" id="launchBtn" class="chip" aria-expanded="false" aria-controls="launcher">Apps</button>
+      <span id="clock"></span>
+    </div>
+  </div>
+
+  <div class="icons">
+    <button type="button" class="icon-btn" data-open="files"><span class="glyph g-files">▤</span>Files</button>
+    <button type="button" class="icon-btn" data-open="term"><span class="glyph g-term">&gt;_</span>Terminal</button>
+    <button type="button" class="icon-btn" data-open="settings"><span class="glyph g-settings">⚙</span>Settings</button>
+    <button type="button" class="icon-btn" data-open="browser"><span class="glyph g-browser">F</span>Browser</button>
+    <button type="button" class="icon-btn" data-open="ai"><span class="glyph g-ai">✦</span>JARVIS</button>
+    <button type="button" class="icon-btn" data-open="whatsapp"><span class="glyph g-wa"><span class="logo" style="--m:url(icons/whatsapp.svg)"></span></span>WhatsApp</button>
+    <button type="button" class="icon-btn" data-open="youtube"><span class="glyph g-yt"><span class="logo" style="--m:url(icons/youtube.svg)"></span></span>YouTube</button>
+    <button type="button" class="icon-btn" data-open="gmail"><span class="glyph g-gm"><span class="logo" style="--m:url(icons/gmail.svg)"></span></span>Gmail</button>
+    <button type="button" class="icon-btn" data-open="maps"><span class="glyph g-maps"><span class="logo" style="--m:url(icons/googlemaps.svg)"></span></span>Maps</button>
+    <button type="button" class="icon-btn" data-open="spotify"><span class="glyph g-sp"><span class="logo" style="--m:url(icons/spotify.svg)"></span></span>Spotify</button>
+    <button type="button" class="icon-btn" data-open="instagram"><span class="glyph g-ig"><span class="logo" style="--m:url(icons/instagram.svg)"></span></span>Instagram</button>
+    <button type="button" class="icon-btn" data-open="google"><span class="glyph g-gg"><span class="logo" style="--m:url(icons/google.svg)"></span></span>Google</button>
+  </div>
+
+  <!-- Files -->
+  <section class="win" id="win-files" aria-label="Files" style="left:150px;top:96px;width:460px;height:330px">
+    <div class="win-head"><span>Files</span><button type="button" class="close" data-close="files" aria-label="Close Files">✕</button></div>
+    <div class="win-body">
+      <div class="files">
+        <nav class="side" aria-label="Folders">
+          <button type="button" data-folder="Documents" aria-pressed="false">Documents</button>
+          <button type="button" data-folder="Downloads" aria-pressed="false">Downloads</button>
+          <button type="button" data-folder="Pictures" aria-pressed="false">Pictures</button>
+        </nav>
+        <div class="list">
+          <h3 id="folder-title">Choose a folder</h3>
+          <ul class="file-list" id="file-list"></ul>
+          <p class="muted">Example files for this prototype.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Terminal -->
+  <section class="win" id="win-term" aria-label="Terminal" hidden style="left:480px;top:210px;width:460px;height:300px">
+    <div class="win-head"><span>Terminal</span><button type="button" class="close" data-close="term" aria-label="Close Terminal">✕</button></div>
+    <div class="win-body" id="term-body">
+      <pre class="term-out" id="term-out">$ nova --hello
+&gt; Welcome to NOVA
+Type help for commands.</pre>
+      <form class="term-form" id="term-form" autocomplete="off">
+        <span id="term-prompt">guest@nova:~$</span>
+        <input id="term-input" aria-label="Command" spellcheck="false">
+      </form>
+    </div>
+  </section>
+
+  <!-- Settings -->
+  <section class="win" id="win-settings" aria-label="Settings" hidden style="left:360px;top:120px;width:380px;height:330px">
+    <div class="win-head"><span>Settings</span><button type="button" class="close" data-close="settings" aria-label="Close Settings">✕</button></div>
+    <div class="win-body">
+      <div class="settings-row">
+        <span class="muted">Accent color</span>
+        <div class="swatches" role="group" aria-label="Accent color">
+          <button type="button" class="swatch" data-a="#A855F7" data-b="#EC4899" style="background:linear-gradient(135deg,#A855F7,#EC4899)" aria-label="Purple" aria-pressed="true"></button>
+          <button type="button" class="swatch" data-a="#14B8A6" data-b="#38BDF8" style="background:linear-gradient(135deg,#14B8A6,#38BDF8)" aria-label="Teal" aria-pressed="false"></button>
+          <button type="button" class="swatch" data-a="#F97316" data-b="#EF4444" style="background:linear-gradient(135deg,#F97316,#EF4444)" aria-label="Orange" aria-pressed="false"></button>
+          <button type="button" class="swatch" data-a="#3B82F6" data-b="#6366F1" style="background:linear-gradient(135deg,#3B82F6,#6366F1)" aria-label="Blue" aria-pressed="false"></button>
+        </div>
+      </div>
+      <div class="settings-row">
+        <span class="muted">Wallpaper</span>
+        <div class="walls" role="group" aria-label="Wallpaper">
+          <button type="button" class="chip" data-w="nova" aria-pressed="true">Nova</button>
+          <button type="button" class="chip" data-w="aurora" aria-pressed="false">Aurora</button>
+          <button type="button" class="chip" data-w="night" aria-pressed="false">Night</button>
+          <button type="button" class="chip" data-w="live" aria-pressed="false">Live</button>
+          <label class="chip" style="cursor:pointer;position:relative">Add image<input type="file" id="wall-file" accept="image/*" style="position:absolute;width:1px;height:1px;opacity:0"></label>
+        </div>
+      </div>
+      <p class="muted">Changes apply right away across the desktop.</p>
+      <p class="muted" id="wall-note"></p>
+    </div>
+  </section>
+
+  <!-- Browser -->
+  <section class="win" id="win-player" aria-label="Player" hidden style="left:120px;top:110px;width:640px;height:420px">
+    <div class="win-head"><span id="player-title">Player</span><button type="button" class="close" data-close="player" aria-label="Close Player">✕</button></div>
+    <div class="win-body" style="display:flex;flex-direction:column;gap:8px">
+      <form class="url-row" id="yt-form" hidden>
+        <input id="yt-input" placeholder="Paste a YouTube video link" aria-label="YouTube video link">
+        <button type="submit" class="go">Play</button>
+      </form>
+      <iframe id="player-frame" title="Embedded app" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen style="flex:1;width:100%;min-height:0;border:0;border-radius:12px;background:#000"></iframe>
+      <p class="muted" id="player-note"></p>
+    </div>
+  </section>
+  <section class="win" id="win-browser" aria-label="Browser" hidden style="left:560px;top:90px;width:500px;height:340px">
+    <div class="win-head"><span>Browser</span><button type="button" class="close" data-close="browser" aria-label="Close Browser">✕</button></div>
+    <div class="win-body">
+      <form class="url-row" id="url-form">
+        <input id="url-input" placeholder="Search or type a website" aria-label="Search or address">
+        <button type="submit" class="go">Go</button>
+      </form>
+      <p class="muted" id="browser-note">Sites open in a new tab.</p>
+      <div class="start" style="margin-top:10px">
+        <a href="https://www.wikipedia.org" target="_blank" rel="noopener">Wikipedia</a>
+        <a href="https://news.ycombinator.com" target="_blank" rel="noopener">Hacker News</a>
+        <a href="https://developer.mozilla.org" target="_blank" rel="noopener">MDN Web Docs</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- NOVA AI -->
+  <section class="win" id="win-ai" aria-label="NOVA AI" style="right:60px;top:96px;width:340px;height:460px">
+    <div class="win-head"><span>✦ JARVIS</span><button type="button" class="close" data-close="ai" aria-label="Close JARVIS">✕</button></div>
+    <div class="win-body" id="ai-body" style="display:flex;flex-direction:column">
+      <div class="chat-log" id="chat-log">
+        <div class="msg bot">Hi, I'm JARVIS, your voice assistant. Type or press Speak. Try "open files", "what time is it" or "who is president of france".</div>
+      </div>
+      <form class="chat-form" id="chat-form" autocomplete="off" style="margin-top:auto">
+        <input id="chat-input" placeholder="Ask JARVIS anything…" aria-label="Message JARVIS">
+        <button type="button" id="mic" class="send" aria-label="Speak to JARVIS">Speak</button>
+        <button type="submit" class="send">Send</button>
+      </form>
+    </div>
+  </section>
+
+  <!-- Launcher -->
+  <div class="launcher" id="launcher" hidden role="dialog" aria-label="App launcher">
+    <input id="launch-q" placeholder="Find an app" aria-label="Find an app">
+    <div class="list-apps" id="launch-list"></div>
+  </div>
+
+  <!-- Dock -->
+  <nav class="dock" aria-label="Dock">
+    <button type="button" data-open="files" aria-label="Open Files"><span class="glyph g-files">▤</span></button>
+    <button type="button" data-open="term" aria-label="Open Terminal"><span class="glyph g-term">&gt;_</span></button>
+    <button type="button" data-open="settings" aria-label="Open Settings"><span class="glyph g-settings">⚙</span></button>
+    <button type="button" data-open="browser" aria-label="Open Browser"><span class="glyph g-browser">F</span></button>
+    <button type="button" data-open="ai" aria-label="Open JARVIS"><span class="glyph g-ai">✦</span></button>
+    <button type="button" data-open="whatsapp" aria-label="Open WhatsApp"><span class="glyph g-wa"><span class="logo" style="--m:url(icons/whatsapp.svg)"></span></span></button>
+    <button type="button" data-open="youtube" aria-label="Open YouTube"><span class="glyph g-yt"><span class="logo" style="--m:url(icons/youtube.svg)"></span></span></button>
+    <button type="button" data-open="gmail" aria-label="Open Gmail"><span class="glyph g-gm"><span class="logo" style="--m:url(icons/gmail.svg)"></span></span></button>
+    <button type="button" data-open="maps" aria-label="Open Maps"><span class="glyph g-maps"><span class="logo" style="--m:url(icons/googlemaps.svg)"></span></span></button>
+    <button type="button" data-open="spotify" aria-label="Open Spotify"><span class="glyph g-sp"><span class="logo" style="--m:url(icons/spotify.svg)"></span></span></button>
+    <button type="button" data-open="instagram" aria-label="Open Instagram"><span class="glyph g-ig"><span class="logo" style="--m:url(icons/instagram.svg)"></span></span></button>
+  </nav>
+</div>
+
+<script>
+(function(){
+  const $ = s => document.querySelector(s);
+  const $$ = s => Array.from(document.querySelectorAll(s));
+  const root = document.documentElement;
+  let z = 20;
+
+  const labels = { files:'Files', term:'Terminal', settings:'Settings', browser:'Browser', ai:'JARVIS', whatsapp:'WhatsApp', youtube:'YouTube', gmail:'Gmail', maps:'Maps', spotify:'Spotify', instagram:'Instagram', google:'Google' };
+  // Apps that run on their own websites open in a new tab (sites can't be embedded here)
+  const external = { whatsapp:'https://web.whatsapp.com', youtube:'https://www.youtube.com', gmail:'https://mail.google.com', maps:'https://maps.google.com', spotify:'https://open.spotify.com', instagram:'https://www.instagram.com', google:'https://www.google.com' };
+  // Apps that can be shown inside a window (their embed pages allow it)
+  const embeds = {
+    maps:{ title:'Maps', src:'https://www.google.com/maps?output=embed&q=Chennai' },
+    spotify:{ title:'Spotify', h:'auto', fh:'152px', src:'https://open.spotify.com/embed/playlist/37i9dQZF1DXcBWIGoYBM5M', paste:'Paste a Spotify song, album or playlist link' },
+    youtube:{ title:'YouTube', paste:'Paste a YouTube video link' }
+  };
+  let playerMode = null;
+  function openPlayer(id){
+    const cfg = embeds[id];
+    const win = document.getElementById('win-player');
+    playerMode = id;
+    $('#player-title').textContent = cfg.title;
+    $('#yt-input').placeholder = cfg.paste || '';
+    $('#yt-form').hidden = !cfg.paste;
+    if(cfg.src){
+      $('#player-frame').src = cfg.src;
+      $('#player-note').textContent = cfg.paste ? 'Paste a link above to play any song, album or playlist.' : 'Shown inside the window.';
+    } else {
+      $('#player-frame').removeAttribute('src');
+      $('#player-note').textContent = 'Paste a link above to play it here.';
+    }
+    win.style.height = cfg.h || '420px';
+    const fr = $('#player-frame');
+    fr.style.height = cfg.fh || '';
+    fr.style.flex = cfg.fh ? '0 0 auto' : '1';
+    win.hidden = false;
+    win.style.zIndex = ++z;
+  }
+  const winId = id => 'win-' + id;
+  const fsData = {
+    Documents:['Resume.pdf','Notes.txt','NOVA_plan.md'],
+    Downloads:['setup.exe','wallpaper.png'],
+    Pictures:['screenshot-01.png','family.jpg']
+  };
+  let cwd = '';
+
+  // ---- windows ----
+  function openApp(id){
+    if(embeds[id]){ openPlayer(id); return true; }
+    if(external[id]){ openLink(external[id]); return true; }
+    const el = document.getElementById(winId(id));
+    if(!el) return false;
+    el.hidden = false;
+    el.style.zIndex = ++z;
+    if(id === 'term') $('#term-input').focus();
+    if(id === 'ai') $('#chat-input').focus();
+    return true;
+  }
+  function closeApp(id){
+    const el = document.getElementById(winId(id));
+    if(el) el.hidden = true;
+  }
+  $$('[data-open]').forEach(b => b.addEventListener('click', () => openApp(b.dataset.open)));
+  $$('[data-close]').forEach(b => b.addEventListener('click', () => closeApp(b.dataset.close)));
+
+  $$('.win').forEach(w => {
+    const head = w.querySelector('.win-head');
+    w.addEventListener('pointerdown', () => { w.style.zIndex = ++z; });
+    head.addEventListener('pointerdown', e => {
+      if(e.target.closest('button')) return;
+      const r = w.getBoundingClientRect();
+      const dx = e.clientX - r.left, dy = e.clientY - r.top;
+      head.setPointerCapture(e.pointerId);
+      const move = ev => {
+        const x = Math.max(0, Math.min(window.innerWidth - 120, ev.clientX - dx));
+        const y = Math.max(40, Math.min(window.innerHeight - 80, ev.clientY - dy));
+        w.style.left = x + 'px';
+        w.style.top = y + 'px';
+        w.style.right = 'auto';
+      };
+      const up = () => {
+        head.removeEventListener('pointermove', move);
+        head.removeEventListener('pointerup', up);
+      };
+      head.addEventListener('pointermove', move);
+      head.addEventListener('pointerup', up);
+    });
+  });
+
+  // ---- clock ----
+  function tick(){
+    $('#clock').textContent = new Date().toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
+  }
+  tick();
+  setInterval(tick, 1000);
+
+  // ---- launcher ----
+  function renderLauncher(q){
+    const list = $('#launch-list');
+    list.textContent = '';
+    Object.keys(labels)
+      .filter(a => labels[a].toLowerCase().includes((q || '').toLowerCase()))
+      .forEach(a => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.textContent = labels[a];
+        b.addEventListener('click', () => { openApp(a); toggleLauncher(false); });
+        list.appendChild(b);
+      });
+  }
+  function toggleLauncher(force){
+    const l = $('#launcher');
+    const show = (force === undefined) ? l.hidden : force;
+    l.hidden = !show;
+    $('#launchBtn').setAttribute('aria-expanded', String(show));
+    if(show){
+      $('#launch-q').value = '';
+      renderLauncher('');
+      $('#launch-q').focus();
+    }
+  }
+  $('#launchBtn').addEventListener('click', () => toggleLauncher());
+  $('#launch-q').addEventListener('input', e => renderLauncher(e.target.value));
+  $('#launch-q').addEventListener('keydown', e => {
+    if(e.key === 'Enter'){
+      const first = $('#launch-list button');
+      if(first) first.click();
+    }
+  });
+  document.addEventListener('keydown', e => { if(e.key === 'Escape') toggleLauncher(false); });
+
+  // ---- files ----
+  function showFolder(name){
+    cwd = name;
+    $$('.side button[data-folder]').forEach(b =>
+      b.setAttribute('aria-pressed', String(b.dataset.folder === name)));
+    $('#folder-title').textContent = name;
+    const ul = $('#file-list');
+    ul.textContent = '';
+    fsData[name].forEach(f => {
+      const li = document.createElement('li');
+      li.textContent = f;
+      ul.appendChild(li);
+    });
+  }
+  $$('.side button[data-folder]').forEach(b =>
+    b.addEventListener('click', () => showFolder(b.dataset.folder)));
+
+  // ---- terminal ----
+  const termOut = $('#term-out');
+  function say(text){
+    termOut.textContent += '\n' + text;
+    const body = $('#term-body');
+    body.scrollTop = body.scrollHeight;
+  }
+  function promptText(){
+    return 'guest@nova:' + (cwd ? '~/' + cwd : '~') + '$';
+  }
+  function runCommand(raw){
+    const line = raw.trim();
+    say(promptText() + ' ' + line);
+    if(!line) return;
+    const parts = line.split(/\s+/);
+    const cmd = parts[0].toLowerCase();
+    const arg = parts.slice(1).join(' ');
+    switch(cmd){
+      case 'help':
+        say('Commands: help, ls, cd <folder>, pwd, date, whoami, echo <text>, open <app>, clear, nova --hello');
+        break;
+      case 'ls':
+        say(cwd ? fsData[cwd].join('  ') : Object.keys(fsData).join('  '));
+        break;
+      case 'cd':
+        if(!arg || arg === '~' || arg === '..'){ cwd = ''; say(''); }
+        else if(fsData[arg]){ showFolder(arg); }
+        else { say('cd: no such folder: ' + arg); }
+        break;
+      case 'pwd':
+        say('/home/guest' + (cwd ? '/' + cwd : ''));
+        break;
+      case 'date':
+        say(new Date().toString());
+        break;
+      case 'whoami':
+        say('guest');
+        break;
+      case 'echo':
+        say(arg);
+        break;
+      case 'open': {
+        const id = Object.keys(labels).find(k => labels[k].toLowerCase() === arg.toLowerCase());
+        if(id && openApp(id)) say('Opening ' + labels[id] + '.');
+        else say('open: unknown app: ' + arg + '. Try: files, terminal, settings, browser, nova ai');
+        break;
+      }
+      case 'clear':
+        termOut.textContent = '';
+        break;
+      case 'nova':
+        if(arg === '--hello') say('> Welcome to NOVA');
+        else say('nova: try nova --hello');
+        break;
+      default:
+        say(cmd + ': command not found. Type help.');
+    }
+  }
+  $('#term-form').addEventListener('submit', e => {
+    e.preventDefault();
+    const input = $('#term-input');
+    runCommand(input.value);
+    input.value = '';
+  });
+  // keep the terminal prompt in sync with the current folder
+  const syncPrompt = () => { $('#term-prompt').textContent = promptText(); };
+  $('#term-form').addEventListener('submit', () => setTimeout(syncPrompt, 0));
+  $$('.side button[data-folder]').forEach(b => b.addEventListener('click', () => setTimeout(syncPrompt, 0)));
+
+  // ---- settings ----
+  const walls = {
+    nova: 'radial-gradient(circle at 70% 30%,#3B1A6B 0%,#1A0B2E 55%,#0B0614 100%)',
+    aurora: 'linear-gradient(160deg,#0B2A4A 0%,#1A0B2E 60%,#2A0F4A 100%)',
+    night: 'linear-gradient(#07050d, #07050d)'
+  };
+  $$('.swatch').forEach(s => s.addEventListener('click', () => {
+    root.style.setProperty('--accent', s.dataset.a);
+    root.style.setProperty('--accent2', s.dataset.b);
+    $$('.swatch').forEach(x => x.setAttribute('aria-pressed', String(x === s)));
+  }));
+  $$('[data-w]').forEach(b => b.addEventListener('click', () => {
+    if(b.dataset.w === 'live'){ startLive(); } else { stopLive(); root.style.setProperty('--wall', walls[b.dataset.w]); }
+    $$('[data-w]').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+  }));
+
+  // ---- live wallpaper: animated aurora with twinkling stars, drawn on a canvas ----
+  const live = $('#live');
+  const ctx = live.getContext('2d');
+  let liveRaf = 0;
+  const blobs = [
+    { c:'#7C3AED', x:0.25, y:0.35, r:0.45, sp:0.0004, ph:0 },
+    { c:'#EC4899', x:0.75, y:0.60, r:0.40, sp:0.0003, ph:2 },
+    { c:'#38BDF8', x:0.55, y:0.20, r:0.35, sp:0.0005, ph:4 }
+  ];
+  const stars = Array.from({ length: 90 }, () => ({ x: Math.random(), y: Math.random(), s: Math.random() * 1.4 + 0.3, t: Math.random() * 6 }));
+  function sizeLive(){
+    const d = Math.min(window.devicePixelRatio || 1, 2);
+    live.width = window.innerWidth * d;
+    live.height = window.innerHeight * d;
+    ctx.setTransform(d, 0, 0, d, 0, 0);
+  }
+  function drawLive(now){
+    const W = window.innerWidth, H = window.innerHeight;
+    ctx.fillStyle = '#07050d';
+    ctx.fillRect(0, 0, W, H);
+    for(const b of blobs){
+      const x = (b.x + Math.sin(now * b.sp + b.ph) * 0.12) * W;
+      const y = (b.y + Math.cos(now * b.sp * 0.8 + b.ph) * 0.10) * H;
+      const r = b.r * Math.max(W, H);
+      const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+      g.addColorStop(0, b.c + 'AA');
+      g.addColorStop(1, b.c + '00');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, W, H);
+    }
+    ctx.fillStyle = '#ffffff';
+    for(const s of stars){
+      const tw = 0.5 + 0.5 * Math.sin(now * 0.002 + s.t);
+      ctx.globalAlpha = 0.25 + 0.6 * tw;
+      ctx.beginPath();
+      ctx.arc(s.x * W, s.y * H, s.s, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    liveRaf = requestAnimationFrame(drawLive);
+  }
+  function startLive(){
+    live.hidden = false;
+    sizeLive();
+    cancelAnimationFrame(liveRaf);
+    liveRaf = requestAnimationFrame(drawLive);
+  }
+  function stopLive(){
+    cancelAnimationFrame(liveRaf);
+    liveRaf = 0;
+    live.hidden = true;
+  }
+  window.addEventListener('resize', () => { if(!live.hidden) sizeLive(); });
+
+  // ---- wallpaper from an image on this computer ----
+  $('#wall-file').addEventListener('change', e => {
+    const note = $('#wall-note');
+    const file = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if(!file) return;
+    if(!file.type.startsWith('image/')){ note.textContent = 'Please choose an image file (JPG, PNG, GIF or WebP).'; return; }
+    const reader = new FileReader();
+    reader.onload = () => {
+      stopLive();
+      root.style.setProperty('--wall', 'url("' + reader.result + '")');
+      $$('[data-w]').forEach(x => x.setAttribute('aria-pressed', 'false'));
+      if(!fsData.Pictures.includes(file.name)) fsData.Pictures.push(file.name);
+      if(cwd === 'Pictures') showFolder('Pictures');
+      const probe = new Image();
+      probe.onload = () => {
+        const small = probe.naturalWidth < 1920;
+        note.textContent = 'Wallpaper set to ' + file.name + '.' + (small ? ' This image is only ' + probe.naturalWidth + ' pixels wide, so it may look blurry. Use one at least 1920 pixels wide.' : '') + ' It resets when the page reloads.';
+      };
+      probe.src = reader.result;
+    };
+    reader.onerror = () => { note.textContent = 'That image could not be read. Try another file.'; };
+    reader.readAsDataURL(file);
+  });
+
+  // ---- browser ----
+  $('#url-form').addEventListener('submit', e => {
+    e.preventDefault();
+    const v = $('#url-input').value.trim();
+    if(!v) return;
+    let href;
+    if(/^https?:\/\//i.test(v)) href = v;
+    else if(/^[^\s]+\.[a-z]{2,}$/i.test(v)) href = 'https://' + v;
+    else href = 'https://www.google.com/search?q=' + encodeURIComponent(v);
+    const a = document.createElement('a');
+    a.href = href;
+    a.target = '_blank';
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    $('#browser-note').textContent = 'Opened in a new tab: ' + href;
+  });
+
+  // ---- Embedded player (YouTube and Spotify paste boxes) ----
+  $('#yt-form').addEventListener('submit', e => {
+    e.preventDefault();
+    const v = $('#yt-input').value.trim();
+    if(playerMode === 'spotify'){
+      const m = v.match(/open\.spotify\.com\/(track|album|playlist|episode|show)\/([A-Za-z0-9]+)/);
+      if(!m){ $('#player-note').textContent = 'That does not look like a Spotify link. Use Share > Copy link in Spotify.'; return; }
+      $('#player-frame').src = 'https://open.spotify.com/embed/' + m[1] + '/' + m[2];
+      $('#player-note').textContent = 'Playing inside the window. Spotify may give a 30-second preview unless you are logged in to Spotify in this browser.';
+      return;
+    }
+    const m = v.match(/(?:v=|youtu\.be\/|embed\/)([A-Za-z0-9_-]{11})/);
+    if(!m){ $('#player-note').textContent = 'That does not look like a YouTube video link.'; return; }
+    $('#player-frame').src = 'https://www.youtube.com/embed/' + m[1];
+    $('#player-note').textContent = 'Playing inside the window. Some videos only play on YouTube itself.';
+  });
+
+  // ---- NOVA AI (scripted replies) ----
+  const log = $('#chat-log');
+  function addMsg(text, who, link){
+    const d = document.createElement('div');
+    d.className = 'msg ' + (who === 'me' ? 'me' : 'bot');
+    d.textContent = text;
+    if(link){
+      const a = document.createElement('a');
+      a.href = link;
+      a.target = '_blank';
+      a.rel = 'noopener';
+      a.textContent = 'Search Google';
+      a.style.display = 'inline-block';
+      a.style.marginTop = '8px';
+      d.appendChild(document.createElement('br'));
+      d.appendChild(a);
+    }
+    log.appendChild(d);
+    const body = $('#ai-body');
+    body.scrollTop = body.scrollHeight;
+  }
+  // ---- NOVA AI brain: runs locally in the page, no network calls ----
+  const kb = [
+    { keys:['hi','hello','hey'], a:`Hello! I'm JARVIS. Ask me a question, do some maths, or say 'open spotify'.` },
+    { keys:['who are you','your name','who made you'], a:`I'm JARVIS, the voice assistant built into NOVA AI OS.` },
+    { keys:['what is nova','nova os','about nova'], a:`NOVA AI OS is a futuristic PC operating system project with a custom purple desktop, an app launcher and an AI assistant built into the system. It is in development.` },
+    { keys:['operating system','what is an os'], a:`An operating system manages a computer's hardware and programs. It handles files, memory, running apps and the screen. Windows, macOS and Linux are examples.` },
+    { keys:['artificial intelligence','what is ai'], a:`AI is software that learns patterns from data so it can understand language, recognise images and make predictions. NOVA aims to bring that into everyday computer use.` },
+    { keys:['roadmap','next steps'], a:`The roadmap has three steps: the desktop prototype (done), working apps and UI, then AI integration so the assistant understands your system and intent.` },
+    { keys:['android'], a:`NOVA is being researched on an Android foundation as a possible base. This is exploration only, not a decision yet.` },
+    { keys:['help','what can you do'], a:`I can do maths (try 12 * (3 + 4)), tell the time and date, open apps (try 'open spotify'), explain basic computing topics, and answer common facts.` },
+    { keys:['date','today'], fn:() => `Today is ${new Date().toDateString()}.` },
+    { keys:['time'], fn:() => `It is ${new Date().toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' })}.` },
+    { keys:['weather'], a:`Live weather isn't connected in this prototype yet. Ask me about NOVA, maths or common facts instead.` },
+    { keys:['folder','folders','file','files','document','documents'], a:`Your folders are Documents, Downloads and Pictures. Open Files to browse them.` },
+    { keys:['capital of france','france capital'], a:`The capital of France is Paris.` },
+    { keys:['capital of india','india capital'], a:`The capital of India is New Delhi.` },
+    { keys:['capital of japan','japan capital'], a:`The capital of Japan is Tokyo.` },
+    { keys:['capital of usa','capital of united states','us capital'], a:`The capital of the United States is Washington, D.C.` },
+    { keys:['capital of uk','capital of britain','capital of england'], a:`The capital of the United Kingdom is London.` },
+    { keys:['planets','how many planets'], a:`There are eight planets: Mercury, Venus, Earth, Mars, Jupiter, Saturn, Uranus and Neptune.` },
+    { keys:['largest ocean'], a:`The Pacific Ocean is the largest ocean.` },
+    { keys:['speed of light'], a:`Light travels about 300,000 kilometres per second in a vacuum.` },
+    { keys:['boiling point'], a:`Water boils at 100 °C (212 °F) at sea level.` },
+    { keys:['tallest mountain','highest mountain'], a:`Mount Everest is the highest mountain above sea level, at about 8,849 metres.` },
+    { keys:['accent','colour','color','theme','wallpaper'], a:`You can change the accent colour and wallpaper in Settings.` }
+  ];
+
+  function hit(t, k){ return new RegExp('\\b' + k + '\\b').test(t); }
+
+  // Small recursive-descent parser: + - * / and parentheses only. No eval.
+  function parseMaths(str){
+    let pos = 0;
+    const peek = () => str[pos];
+    const eat = () => str[pos++];
+    function num(){
+      const m = /^\d+(\.\d+)?/.exec(str.slice(pos));
+      if(!m) throw new Error('number');
+      pos += m[0].length;
+      return parseFloat(m[0]);
+    }
+    function factor(){
+      if(peek() === '-'){ eat(); return -factor(); }
+      if(peek() === '('){ eat(); const v = expr(); if(eat() !== ')') throw new Error('paren'); return v; }
+      return num();
+    }
+    function term(){
+      let v = factor();
+      while(peek() === '*' || peek() === '/'){ const op = eat(); const r = factor(); v = op === '*' ? v * r : v / r; }
+      return v;
+    }
+    function expr(){
+      let v = term();
+      while(peek() === '+' || peek() === '-'){ const op = eat(); const r = term(); v = op === '+' ? v + r : v - r; }
+      return v;
+    }
+    const v = expr();
+    if(pos !== str.length) throw new Error('trailing');
+    return v;
+  }
+
+  // Returns undefined when the message is not a sum at all.
+  function maths(q){
+    const src = q.replace(/\s+/g, '').replace(/x/gi, '*');
+    if(!/^[-+*\/().\d]+$/.test(src) || !/\d/.test(src) || !/[-+*\/]/.test(src.replace(/^-/, ''))) return undefined;
+    try{
+      const v = parseMaths(src);
+      return isFinite(v) ? `Answer: ${+v.toFixed(6)}` : `That can't be worked out.`;
+    } catch(e){
+      return `I couldn't work that out. Try something like 12 * (3 + 4).`;
+    }
+  }
+
+  function reply(q){
+    const raw = q.trim();
+    const t = raw.toLowerCase();
+    if(!t) return `Ask me something.`;
+    const m = maths(raw);
+    if(m !== undefined) return m;
+    if(/\bopen\b/.test(t)){
+      const id = Object.keys(labels).find(k => t.includes(labels[k].toLowerCase()));
+      if(id){ openApp(id); return `Opening ${labels[id]}.`; }
+    }
+    for(const item of kb){
+      if(item.keys.some(k => hit(t, k))) return item.fn ? item.fn() : item.a;
+    }
+    return null; // unknown: the caller asks the live backend
+  }
+
+  function legacyReply(q){
+    const t = q.toLowerCase();
+    if(/\b(hi|hello|hey)\b/.test(t)) return "Hello! I'm NOVA. Try 'open files', 'what time is it' or 'show my folders'.";
+    if(/\btime\b/.test(t)) return 'It is ' + new Date().toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' }) + '.';
+    if(/weather/.test(t)) return "Live weather isn't connected in this prototype yet.";
+    if(t.includes('open')){
+      const id = Object.keys(labels).find(k => t.includes(labels[k].toLowerCase()));
+      if(id){ openApp(id); return 'Opening ' + labels[id] + '.'; }
+    }
+    if(/folder|file|document/.test(t)) return 'Your folders are Documents, Downloads and Pictures. Open Files to browse them.';
+    if(/accent|colou?r|theme|wallpaper/.test(t)) return 'You can change the accent color and wallpaper in Settings.';
+    return "I can open apps, tell the time, and point you to your folders and settings. Full AI answers come with the AI integration step.";
+  }
+  $('#chat-form').addEventListener('submit', e => {
+    e.preventDefault();
+    const input = $('#chat-input');
+    const v = input.value.trim();
+    if(!v) return;
+    addMsg(v, 'me');
+    input.value = '';
+    const out = reply(v);
+    if(out === null) askLive(v);
+    else { addMsg(out, 'bot'); speak(out); }
+  });
+
+  // Live answers from the Netlify function (only works on the deployed site)
+  async function askLive(q){
+    addMsg('Thinking…', 'bot');
+    const bubble = log.lastElementChild;
+    try{
+      const res = await fetch('/.netlify/functions/ask', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question: q })
+      });
+      const data = await res.json();
+      const text = res.ok && data.answer ? data.answer : 'JARVIS could not answer: ' + (data.error || 'unknown error');
+      bubble.textContent = text;
+      speak(text);
+    } catch(e){
+      bubble.textContent = "Live answers are not available on this version. Ask me about NOVA, computing, maths, the time, or common facts.";
+    }
+  }
+
+  // ---- Jarvis voice: speak to it and hear replies (Chrome/Edge; asks for microphone permission) ----
+  function speak(text){
+    if(!('speechSynthesis' in window)) return;
+    const u = new SpeechSynthesisUtterance(text);
+    u.rate = 1;
+    u.pitch = 0.9;
+    speechSynthesis.cancel();
+    speechSynthesis.speak(u);
+  }
+  const micBtn = $('#mic');
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(!SR){
+    micBtn.disabled = true;
+    micBtn.textContent = 'No voice';
+    micBtn.title = 'Voice needs Chrome or Edge';
+  } else {
+    const rec = new SR();
+    rec.lang = 'en-US';
+    rec.interimResults = false;
+    rec.maxAlternatives = 1;
+    rec.onresult = e => {
+      $('#chat-input').value = e.results[0][0].transcript;
+      $('#chat-form').requestSubmit();
+    };
+    rec.onend = () => { micBtn.textContent = 'Speak'; };
+    rec.onerror = () => { micBtn.textContent = 'Speak'; };
+    micBtn.addEventListener('click', () => {
+      micBtn.textContent = 'Listening…';
+      try { rec.start(); } catch(e){ micBtn.textContent = 'Speak'; }
+    });
+  }
+
+  // ---- start state ----
+  showFolder('Documents');
+})();
+</script>
